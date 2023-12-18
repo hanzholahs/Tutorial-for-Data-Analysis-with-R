@@ -34,9 +34,12 @@ library(tidymodels)
 data_path <- "./data/MELBOURNE_HOUSE_PRICES_LESS.csv"
 
 housing <- read_csv(data_path)
+str(housing)
+glimpse(housing)
 
 
 # clean data
+purrr::map(housing, function(x) {sum(is.na(x))})
 
 housing <- 
   housing |> 
@@ -46,10 +49,12 @@ housing <-
          Method = factor(Method),
          SellerG = factor(SellerG),
          Date = dmy(Date),
+         # Day = day(Date),
+         # Month = month(Date),
+         # Year = year(Date),
          Postcode = factor(Postcode),
          Regionname = factor(Regionname))
 
-purrr::map(housing, function(x) {sum(is.na(x))})
 purrr::map(select_if(housing, is.factor), function(x) {levels(x) |> length()})
 
 # In python, we can also use map function like this
@@ -68,6 +73,7 @@ purrr::map(select_if(housing, is.factor), function(x) {levels(x) |> length()})
 #   sampling. When not NULL, each resample is created within the stratification
 #   variable. Numeric strata are binned into quartiles.
 
+set.seed(123)
 housing_split <- initial_split(housing, prop = 0.8, strata = Price)
 
 housing_train <- training(housing_split)
@@ -85,8 +91,14 @@ lm_model <- lm(Price ~ Rooms + Propertycount, data = housing_train)
 
 summary(lm_model)
 
+# Di scikit-learn (python)
+#   lm_model = LinearRegression()
+#   lm_model.fit(X, y)
+
 
 # Make predictions
+
+predict(lm_model, data = housing_test)
 
 lm_preds <- tibble(truth = housing_test$Price, 
                    estimate = predict(lm_model, housing_test))
@@ -110,6 +122,8 @@ summary(tidy_lm_fit$fit)
 
 
 # make predictions
+predict(tidy_lm_fit, housing_test)
+
 tidy_lm_preds <-
   select(housing_test, Price) |> 
   bind_cols(predict(tidy_lm_fit, housing_test))
@@ -123,9 +137,12 @@ tidy_lm_fit_xy <- fit_xy(tidy_lm_model,
                          y = pull(housing_train, Price))
 
 summary(tidy_lm_fit_xy$fit)
+extract_fit_engine(tidy_lm_fit_xy)
 
 
 # make predictions
+predict(tidy_lm_fit_xy, housing_test)
+
 tidy_lm_preds_xy <-
   select(housing_test, Price) |> 
   bind_cols(predict(tidy_lm_fit_xy, housing_test))
@@ -135,6 +152,11 @@ tidy_lm_preds_xy <-
 
 
 # Customizing Engines and Parameters --------------------------------------
+
+# ridge regression, lasso regression, elastic net regression
+
+# loss function: untuk mengupdate parameter model (proses training)
+# performance metrics: untuk membandingkan model (di akhir)
 
 tidy_glmnet_preds_1 <-
   linear_reg(engine = "glmnet", penalty = 2, mixture = 0.5) |> 
@@ -155,12 +177,18 @@ tidy_glmnet_preds_3 <-
 
 # Using Different Models --------------------------------------------------
 
+# random forest
+tidy_btree_preds <- 
+  rand_forest(mode = "regression") |> 
+  fit(formula = Price ~ Rooms + Propertycount, data = housing_train) |> 
+  predict(housing_test)
+
 # boosted tree
 tidy_btree_preds <- 
   boost_tree(mode = "regression") |> 
   fit(formula = Price ~ Rooms + Propertycount, data = housing_train) |> 
   predict(housing_test)
-  
+
 # generative additive models
 tidy_gam_preds <-
   gen_additive_mod(mode = "regression") |> 
@@ -185,6 +213,9 @@ tibble(.metric = c("MAE", "RMSE"),
 
 # evaluate using yardstick
 
+rmse(tidy_lm_preds, truth = Price, estimate = .pred)
+mae(tidy_lm_preds, truth = Price, estimate = .pred)
+
 eval_metric <- metric_set(rmse, mae)
 
 eval_metric(tidy_lm_preds, truth = Price, estimate = .pred)
@@ -198,11 +229,11 @@ model_IDs <- c("Linear Model", "Elastic Net 1", "Elastic Net 2",
 
 results <- 
   list(select(tidy_lm_preds, .pred),
-     tidy_glmnet_preds_1,
-     tidy_glmnet_preds_2,
-     tidy_glmnet_preds_3,
-     tidy_btree_preds,
-     tidy_gam_preds) |> 
+       tidy_glmnet_preds_1,
+       tidy_glmnet_preds_2,
+       tidy_glmnet_preds_3,
+       tidy_btree_preds,
+       tidy_gam_preds) |> 
   map(function(pred) select(housing_test, Price) |> bind_cols(pred)) |> 
   map(function(pred) eval_metric(pred, truth = Price, estimate = .pred)) |> 
   map2_dfr(model_IDs, function(pred, ID) {mutate(pred, Model_ID = ID)}) |> 
@@ -214,7 +245,7 @@ results <-
 results
 
 
-# plotting results
+# plotting the results
 
 ggplot(pivot_longer(results, -Model_ID, names_to = "metric"),
        aes(y = Model_ID, x = value)) +
@@ -228,5 +259,4 @@ ggplot(pivot_longer(results, -Model_ID, names_to = "metric"),
   scale_fill_brewer(type = "qual", palette = 2, guide = "none") +
   theme_light() +
   theme(plot.title.position = "plot",
-        legend.position = "bottom",
         strip.text = element_text(face = "bold"))
