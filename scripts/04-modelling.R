@@ -8,14 +8,21 @@
 
 # Setup -------------------------------------------------------------------
 
-# Uncomment code below to install packages for modelling!
+# Un-comment code below to install packages for modelling!
 
+# install.packages("tidyverse")
+# install.packages("tidymodels")
 # install.packages("xgboost")
 # install.packages("glmnet")
+# install.packages("scales")
 
+
+# load packages
 
 library(tidyverse)
 library(tidymodels)
+
+
 
 
 
@@ -23,11 +30,14 @@ library(tidymodels)
 
 
 # import data
+
 data_path <- "./data/MELBOURNE_HOUSE_PRICES_LESS.csv"
 
 housing <- read_csv(data_path)
 
-# clean
+
+# clean data
+
 housing <- 
   housing |> 
   filter(!is.na(Price)) |> 
@@ -47,7 +57,11 @@ purrr::map(select_if(housing, is.factor), function(x) {levels(x) |> length()})
 
 
 
+
+
 # Data splitting ----------------------------------------------------------
+
+# Split data into train (80%) and test (20%)
 
 # `strata` argument
 #   A variable in data (single character or name) used to conduct stratified
@@ -61,16 +75,22 @@ housing_test <- testing(housing_split)
 
 
 
+
+
 # Basic modelling ---------------------------------------------------------
 
 # Build model
+
 lm_model <- lm(Price ~ Rooms + Propertycount, data = housing_train)
 
 summary(lm_model)
 
+
 # Make predictions
+
 lm_preds <- tibble(truth = housing_test$Price, 
                    estimate = predict(lm_model, housing_test))
+
 
 
 
@@ -88,6 +108,7 @@ tidy_lm_fit <- fit(tidy_lm_model,
 
 summary(tidy_lm_fit$fit)
 
+
 # make predictions
 tidy_lm_preds <-
   select(housing_test, Price) |> 
@@ -96,16 +117,20 @@ tidy_lm_preds <-
 
 
 # build model using x and y
+
 tidy_lm_fit_xy <- fit_xy(tidy_lm_model,
                          x = select(housing_train, Rooms, Propertycount),
                          y = pull(housing_train, Price))
 
 summary(tidy_lm_fit_xy$fit)
 
+
 # make predictions
 tidy_lm_preds_xy <-
   select(housing_test, Price) |> 
   bind_cols(predict(tidy_lm_fit_xy, housing_test))
+
+
 
 
 
@@ -149,6 +174,7 @@ tidy_gam_preds <-
 
 
 # evaluate manually
+
 lm_mae <- mean(abs(lm_preds$truth - lm_preds$estimate))
 lm_mse <- mean((lm_preds$truth - lm_preds$estimate) ^ 2)
 lm_rmse <- sqrt(lm_mse)
@@ -158,6 +184,7 @@ tibble(.metric = c("MAE", "RMSE"),
 
 
 # evaluate using yardstick
+
 eval_metric <- metric_set(rmse, mae)
 
 eval_metric(tidy_lm_preds, truth = Price, estimate = .pred)
@@ -166,9 +193,11 @@ eval_metric(tidy_lm_preds_xy, truth = Price, estimate = .pred)
 
 # evaluate all model predictions
 
-model_IDs <- c("linear model", "elnet 1", "elnet 2", "elnet 3", "btree", "GAM")
-              
-list(select(tidy_lm_preds, .pred),
+model_IDs <- c("Linear Model", "Elastic Net 1", "Elastic Net 2",
+               "Elastic Net 3", "XGBoost", "GAM")
+
+results <- 
+  list(select(tidy_lm_preds, .pred),
      tidy_glmnet_preds_1,
      tidy_glmnet_preds_2,
      tidy_glmnet_preds_3,
@@ -182,3 +211,22 @@ list(select(tidy_lm_preds, .pred),
   setNames(c("Model_ID", "RMSE", "MAE")) |> 
   arrange(RMSE)
 
+results
+
+
+# plotting results
+
+ggplot(pivot_longer(results, -Model_ID, names_to = "metric"),
+       aes(y = Model_ID, x = value)) +
+  geom_col(aes(fill = metric), colour = "black", position = "dodge") +
+  labs(title = "Models Performance", 
+       subtitle = "Comparison between Linear Regression, Elastic Net, Boosted Trees, and GAM",
+       caption = "Kaggle - Melbourne Housing Market",
+       x = NULL, y = NULL) +
+  facet_grid(metric ~ .) +
+  scale_x_continuous(labels = scales::number) +
+  scale_fill_brewer(type = "qual", palette = 2, guide = "none") +
+  theme_light() +
+  theme(plot.title.position = "plot",
+        legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
