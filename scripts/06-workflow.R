@@ -35,12 +35,12 @@ stars <-
 
 
 purrr::map_dbl(stars, ~ unique(.) |> length())
-purrr::map_dbl(stars, ~ mean(is.na(.)))
+purrr::map_dbl(stars, ~ mean(!is.na(.)))
 
 
 # Simulate missing values
 
-n_missing <- 15
+n_missing <- 35
 
 row_index <- runif(n_missing, 1, nrow(stars)) |> as.integer()
 col_index <- runif(n_missing, 1, ncol(stars) - 1) |> as.integer()
@@ -57,7 +57,7 @@ for (i in seq_len(n_missing)) {
 
 # Split data into train and test
 
-set.seed(42)
+set.seed(123)
 stars_split <- initial_split(stars, prop = 0.8, strata = SpectralClass)
 
 stars_train <- training(stars_split)
@@ -70,7 +70,7 @@ stars_test <- testing(stars_split)
 
 # Create a Recipe and a Model ---------------------------------------------
 
-stars |> count(StarColor) |> arrange(n) |> mutate(prop = cumsum(n) / sum(n))
+stars |> count(StarColor) |> arrange(n) |> mutate(prop = n / sum(n))
 
 # Define the model
 
@@ -82,8 +82,8 @@ stars_rec <-
   step_impute_knn(StarType, StarCategory) |> 
   step_impute_mode(StarColor) |> 
   # transform nominal predictors
-  step_other(threshold = 0.2) |> 
-  step_dummy(StarCategory, StarType) |> 
+  step_other(StarColor, threshold = 0.2) |> 
+  step_dummy(StarCategory, StarType, StarColor, one_hot = TRUE) |> 
   # transform numeric predictors
   step_center(Radius, Luminosity, Temperature) |> 
   step_scale(Radius, Luminosity, Temperature) |> 
@@ -91,7 +91,7 @@ stars_rec <-
   step_zv(all_predictors())
 
 
-# Define a recipe
+# Define a model
 
 stars_model <- rand_forest(mode = "classification", trees = 50)
 
@@ -114,11 +114,18 @@ stars_wflow <-
 stars_fit <- fit(stars_wflow, data = stars_train)
 
 stars_fit
+
 extract_fit_parsnip(stars_fit)
 extract_recipe(stars_fit)
 
+extract_fit_parsnip(stars_fit) |> extract_fit_engine()
+
+
+
 
 # Generate predictions
+
+predict(stars_fit, stars_test)
 
 preds <- bind_cols(select(stars_test, SpectralClass),
                    predict(stars_fit, stars_test))
