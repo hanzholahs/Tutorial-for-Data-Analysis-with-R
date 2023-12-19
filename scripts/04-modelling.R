@@ -6,9 +6,10 @@
 
 
 
+
 # Setup -------------------------------------------------------------------
 
-# Un-comment code below to install packages for modelling!
+# Un-comment code below to install packages!
 
 # install.packages("tidyverse")
 # install.packages("tidymodels")
@@ -216,10 +217,10 @@ tibble(.metric = c("MAE", "RMSE"),
 rmse(tidy_lm_preds, truth = Price, estimate = .pred)
 mae(tidy_lm_preds, truth = Price, estimate = .pred)
 
-eval_metric <- metric_set(rmse, mae)
+eval_metrics <- metric_set(rmse, mae)
 
-eval_metric(tidy_lm_preds, truth = Price, estimate = .pred)
-eval_metric(tidy_lm_preds_xy, truth = Price, estimate = .pred)
+eval_metrics(tidy_lm_preds, truth = Price, estimate = .pred)
+eval_metrics(tidy_lm_preds_xy, truth = Price, estimate = .pred)
 
 
 # evaluate all model predictions
@@ -235,7 +236,7 @@ results <-
        tidy_btree_preds,
        tidy_gam_preds) |> 
   map(function(pred) select(housing_test, Price) |> bind_cols(pred)) |> 
-  map(function(pred) eval_metric(pred, truth = Price, estimate = .pred)) |> 
+  map(function(pred) eval_metrics(pred, truth = Price, estimate = .pred)) |> 
   map2_dfr(model_IDs, function(pred, ID) {mutate(pred, Model_ID = ID)}) |> 
   select(Model_ID, .metric, .estimate) |> 
   pivot_wider(names_from = .metric, values_from = .estimate) |> 
@@ -247,7 +248,7 @@ results
 
 # plotting the results
 
-ggplot(pivot_longer(results, -Model_ID, names_to = "metric"),
+ggplot(data = pivot_longer(results, -Model_ID, names_to = "metric"),
        aes(y = Model_ID, x = value)) +
   geom_col(aes(fill = metric), colour = "black", position = "dodge") +
   labs(title = "Models Performance", 
