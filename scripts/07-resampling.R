@@ -19,7 +19,8 @@ library(tidymodels)
 
 # Import data from the internet
 
-water <- read_csv('./data/water_potability.csv') |> 
+water <-
+  read_csv('./data/water_potability.csv') |> 
   janitor::clean_names("upper_camel") |> 
   rename("pH" = "Ph") |> 
   mutate(Potability = factor(Potability))
@@ -30,7 +31,8 @@ summary(water)
 
 count(water, Potability) |> mutate(prop = n / sum(n))
 
-purrr::map_dbl(water, function(x) {mean(!is.na(x))})
+purrr::map_dbl(water, function(x) {mean(!is.na(x))}) |> 
+  scales::percent()
 
 
 
@@ -43,7 +45,7 @@ purrr::map_dbl(water, function(x) {mean(!is.na(x))})
 # Set pre-processed data
 
 water_rec <- 
-  recipe(Potability ~ ., data = water_train) |> 
+  recipe(Potability ~ ., data = water) |> 
   step_impute_median(all_numeric_predictors()) |> 
   step_discretize(Hardness, Sulfate, Conductivity) |>
   step_dummy(all_nominal_predictors()) |> 
@@ -116,7 +118,7 @@ for (water_wflow in define_models()) {
     pull(.estimate)
   
   
-  # evaluate test accuracy
+  # evaluate test accuracy (it's shouldn't actually be here)
   
   preds_test <- predict(water_fit, water_test)
   
@@ -145,7 +147,7 @@ results |>
            factor(levels = c("TRAIN", "VAL", "TEST"))) |> 
   ggplot(aes(y = fct_rev(name), x = value, fill = model_names)) +
   geom_col(position = "dodge") +
-  facet_wrap(model_names ~ .) +
+  facet_wrap(model_names ~ ., nrow = 3) +
   scale_x_continuous(labels = scales::percent) +
   scale_fill_brewer(type = "qual", palette = 2, guide = "none") +
   labs(title = "Using Validation Sets", x = NULL, y = NULL) +
@@ -175,7 +177,7 @@ water_folds
 
 # Playing with the first fold
 
-water_folds$splits[[1]]
+water_folds[[1,1]][[1]]
 
 sample_fold_train <- analysis(water_folds$splits[[1]])
 sample_fold_test <- assessment(water_folds$splits[[1]])
@@ -192,6 +194,8 @@ fit(sample_model, data = sample_fold_train) |>
 water_wflow <- define_models()[[2]]
 
 water_res_cv <- fit_resamples(water_wflow, resamples = water_folds)
+
+water_res_cv$.metrics
 
 collect_metrics(water_res_cv)
 
